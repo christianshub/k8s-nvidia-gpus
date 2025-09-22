@@ -1,0 +1,41 @@
+---
+- name: Deploy RKE2 and prepare local kubeconfig
+  hosts: masters
+  become: yes
+
+  pre_tasks:
+    - name: Ensure local .kube directory exists (control host)
+      delegate_to: localhost
+      become: false
+      file:
+        path: "{{ lookup('env', 'HOME') + '/.kube' }}"
+        state: directory
+        mode: "0700"
+
+    - name: Ensure Galaxy role lablabs.rke2 is installed (auto-install if missing)
+      delegate_to: localhost
+      become: false
+      run_once: true
+      vars: { role_name: lablabs.rke2 }
+      block:
+        - name: Check for role in common paths
+          stat:
+            path: "{{ item }}"
+          loop:
+            - "{{ playbook_dir }}/roles/{{ role_name }}"
+            - "{{ lookup('env','HOME') + '/.ansible/roles/' + role_name }}"
+            - "/usr/share/ansible/roles/{{ role_name }}"
+            - "/etc/ansible/roles/{{ role_name }}"
+          register: role_stats
+
+        - name: Install role from Galaxy if not present
+          when: (role_stats.results | selectattr('stat.exists') | list | length) == 0
+          ansible.builtin.command: "ansible-galaxy role install {{ role_name }}"
+
+    - name: Set SELinux to permissive (NOT SURE THIS IS REALLY NEEDED)
+      ansible.posix.selinux:
+        policy: targeted
+        state: permissive
+
+  roles:
+    - role: lablabs.rke2
