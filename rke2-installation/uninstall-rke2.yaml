@@ -1,0 +1,210 @@
+---
+- name: Uninstall RKE2 completely (images + etcd) and reset node
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    flush_firewall: true            # also flush iptables/nftables
+    reboot_after: true              # reboot at the end
+    full_containerd_reset: true     # also remove /var/lib/containerd (if node isn't used for anything else)
+    backup_registries_yaml: true    # move /etc/rancher/rke2/registries.yaml aside
+
+  pre_tasks:
+    - name: Detect installed RKE2 role via systemd units
+      stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/systemd/system/rke2-server.service
+        - /etc/systemd/system/rke2-agent.service
+      register: rke2_units
+
+    - name: Decide which RKE2 unit to stop
+      set_fact:
+        rke2_unit_to_stop: >-
+          {{ 'rke2-server' if (rke2_units.results[0].stat.exists) else
+             ('rke2-agent' if (rke2_units.results[1].stat.exists) else '') }}
+
+  tasks:
+    # stop services first
+    - name: Stop RKE2 service if present
+      when: rke2_unit_to_stop != ''
+      systemd:
+        name: "{{ rke2_unit_to_stop }}"
+        state: stopped
+        enabled: no
+        daemon_reload: yes
+
+    # ---- RPM-based RKE2 removal (so tar install won't be blocked later) ----
+    - name: Detect RPM-based RKE2 install
+      command: rpm -q rke2-common
+      register: rpm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Run official uninstall scripts if present
+      when: rpm_check.rc == 0
+      args: { executable: /bin/bash }
+      shell: |
+        set -euo pipefail
+        command -v rke2-killall.sh >/dev/null 2>&1 && rke2-killall.sh || true
+        command -v rke2-uninstall.sh >/dev/null 2>&1 && rke2-uninstall.sh || true
+        command -v rke2-agent-uninstall.sh >/dev/null 2>&1 && rke2-agent-uninstall.sh || true
+
+    - name: Remove RKE2 RPM packages (idempotent)
+      when: rpm_check.rc == 0
+      package:
+        name:
+          - rke2-server
+          - rke2-agent
+          - rke2-common
+        state: absent
+
+    # ---- container runtime cleanup (best-effort) ----
+    - name: Locate nerdctl / ctr / crictl
+      set_fact:
+        nerdctl_bin: >-
+          {{ (lookup('first_found', {'files': [
+                '/var/lib/rancher/rke2/bin/nerdctl', '/usr/local/bin/nerdctl', '/usr/bin/nerdctl'
+              ], 'skip': True}) ) | default('', true) }}
+        ctr_bin: >-
+          {{ (lookup('first_found', {'files': [
+                '/var/lib/rancher/rke2/bin/ctr', '/usr/local/bin/ctr', '/usr/bin/ctr'
+              ], 'skip': True}) ) | default('', true) }}
+        crictl_bin: >-
+          {{ (lookup('first_found', {'files': [
+                '/var/lib/rancher/rke2/bin/crictl', '/usr/local/bin/crictl', '/usr/bin/crictl'
+              ], 'skip': True}) ) | default('', true) }}
+
+    - name: Stop pods via crictl (best-effort)
+      command: "{{ crictl_bin }} stopp $( {{ crictl_bin }} pods -q )"
+      when: crictl_bin | length > 0
+      failed_when: false
+
+    - name: Remove pods via crictl (best-effort)
+      command: "{{ crictl_bin }} rmp $( {{ crictl_bin }} pods -q )"
+      when: crictl_bin | length > 0
+      failed_when: false
+
+    - name: Force remove containers via nerdctl (k8s.io)
+      shell: "{{ nerdctl_bin }} -n k8s.io ps -aq | xargs -r {{ nerdctl_bin }} -n k8s.io rm -f"
+      args: { executable: /bin/bash }
+      when: nerdctl_bin | length > 0
+      failed_when: false
+
+    - name: Kill/delete tasks and containers via ctr (fallback)
+      shell: |
+        set -euo pipefail
+        {{ ctr_bin }} -n k8s.io tasks ls -q 2>/dev/null | xargs -r -I{} {{ ctr_bin }} -n k8s.io tasks kill -s KILL {} || true
+        {{ ctr_bin }} -n k8s.io containers ls -q 2>/dev/null | xargs -r -I{} {{ ctr_bin }} -n k8s.io containers delete {} || true
+      args: { executable: /bin/bash }
+      when: ctr_bin | length > 0
+      failed_when: false
+
+    - name: nerdctl system prune (k8s.io)
+      command: "{{ nerdctl_bin }} -n k8s.io system prune -a -f"
+      when: nerdctl_bin | length > 0
+      failed_when: false
+
+    - name: nerdctl image prune (k8s.io)
+      command: "{{ nerdctl_bin }} -n k8s.io image prune -a -f"
+      when: nerdctl_bin | length > 0
+      failed_when: false
+
+    - name: ctr content prune (fallback)
+      command: "{{ ctr_bin }} -n k8s.io content rm --all"
+      when: ctr_bin | length > 0
+      failed_when: false
+
+    - name: Unmount leftover containerd/CNI mounts (best-effort)
+      shell: |
+        set -euo pipefail
+        mount | egrep '/var/lib/rancher/rke2|/var/lib/containerd|/run/(k3s|containerd)|/var/lib/cni' \
+          | awk '{print $3}' | sort -r | xargs -r -n1 umount -l
+      args: { executable: /bin/bash }
+      failed_when: false
+
+    # ---- config + data dirs removal ----
+    - name: Move /etc/rancher/rke2/registries.yaml aside (backup)
+      when: backup_registries_yaml
+      shell: |
+        set -euo pipefail
+        if [ -f /etc/rancher/rke2/registries.yaml ]; then
+          ts="$(date +%Y%m%d%H%M%S)"
+          mkdir -p /etc/rancher/rke2/backup
+          mv /etc/rancher/rke2/registries.yaml "/etc/rancher/rke2/backup/registries.yaml.$ts"
+        fi
+      args: { executable: /bin/bash }
+      failed_when: false
+
+    - name: Remove RKE2/etcd/containerd/CNI data dirs
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/rancher/rke2/server/db/etcd
+        - /var/lib/rancher/rke2/server/db/state.db
+        - /var/lib/rancher/rke2/server/db/state.db-shm
+        - /var/lib/rancher/rke2/server/db/state.db-wal
+        - /var/lib/rancher/rke2/agent/images
+        - /var/lib/rancher/rke2/agent/containerd
+        - /var/lib/rancher/rke2
+        - /var/lib/rancher
+        - /etc/rancher/rke2
+        - /var/lib/etcd
+        - /var/lib/kubelet
+        - /var/lib/cni
+        - /etc/cni
+        - /opt/cni
+        - /run/k3s
+        - /run/rke2
+        - "{{ '/var/lib/containerd' if full_containerd_reset else '/var/empty-do-not-delete' }}"
+      when: item != '/var/empty-do-not-delete'
+      ignore_errors: true
+
+    - name: Remove RKE2 binaries and helpers
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/rke2
+        - /usr/local/bin/rke2-killall.sh
+        - /usr/local/bin/rke2-uninstall.sh
+        - /usr/local/bin/rke2-agent-uninstall.sh
+        - /usr/local/libexec/kubernetes
+      ignore_errors: true
+
+    - name: Remove systemd units if any remain
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/rke2-server.service
+        - /etc/systemd/system/rke2-agent.service
+        - /etc/systemd/system/rke2-server.env
+        - /etc/systemd/system/rke2-agent.env
+      notify: Daemon reload
+      ignore_errors: true
+
+    # firewall (optional)
+    - name: Flush iptables/nftables
+      when: flush_firewall
+      block:
+        - command: iptables -F
+          ignore_errors: true
+        - command: iptables -t nat -F
+          ignore_errors: true
+        - command: iptables -t mangle -F
+          ignore_errors: true
+        - command: nft flush ruleset
+          ignore_errors: true
+
+    - name: Reboot (optional)
+      when: reboot_after
+      reboot:
+        msg: "Rebooting after complete RKE2 uninstall and wipe"
+
+  handlers:
+    - name: Daemon reload
+      systemd:
+        daemon_reload: yes
