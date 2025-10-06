@@ -246,7 +246,7 @@ The following is to be executed on your RHEL8 OS - from your workstation (throug
     kubectl apply -k cluster-config/cluster/flux-system/
     ```
 
-### Verification the GPU did computing
+### Verification one GPU did computing
 
 Run the `vectoradd` verification test like shown in https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html#cuda-vectoradd:
 
@@ -255,20 +255,20 @@ cat <<'EOF' | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:
-name: cuda-vectoradd
-namespace: default
+  name: cuda-vectoradd
+  namespace: default
 spec:
-backoffLimit: 0
-template:
+  backoffLimit: 0
+  template:
     spec:
-    runtimeClassName: nvidia
-    restartPolicy: Never
-    containers:
+      runtimeClassName: nvidia
+      restartPolicy: Never
+      containers:
         - name: cuda-vectoradd
-        image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0-ubi8
-        resources:
+          image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0-ubi8
+          resources:
             limits:
-            nvidia.com/gpu: 1
+              nvidia.com/gpu: 2
 EOF
 ```
 
@@ -282,6 +282,98 @@ Copy output data from the CUDA device to the host memory
 Test PASSED
 Done
 ```
+
+### Verification two GPUs did computing in parallel
+
+```bash
+cat <<'EOF' | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: two-pods-one-gpu
+  namespace: default
+spec:
+  completions: 2
+  parallelism: 2
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: vectoradd-verify
+    spec:
+      imagePullSecrets:
+        - name: ngc-pull
+      runtimeClassName: nvidia
+      restartPolicy: Never
+      containers:
+        - name: vectoradd
+          image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0-ubi8
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          command: ["/bin/sh","-lc"]
+          args:
+            - |
+              echo "===== POD: ${POD_NAME} ====="
+              echo "===== ENV (NVIDIA/CUDA) ====="
+              env | grep -E '^(NVIDIA|CUDA)_' || true
+              echo "===== DEVICE NODES ====="
+              ls -l /dev/nvidia* || true
+              echo "===== NVIDIA-SMI (visible devices) ====="
+              nvidia-smi -L
+              echo "===== UUID TABLE ====="
+              nvidia-smi --query-gpu=index,uuid,name --format=csv,noheader
+              echo "===== RUN VECTORADD ====="
+              /cuda-samples/vectorAdd
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+EOF
+```
+
+Check results:
+
+```bash
+kubectl get pods -l job-name=two-pods-one-gpu
+for p in $(kubectl get pods -l job-name=two-pods-one-gpu -o name); do
+  echo "==== $p ===="; kubectl logs "$p"; echo; 
+done
+```
+
+Expected result - something along the lines of this:
+
+```sh
+# pod 1
+===== NVIDIA-SMI (visible devices) =====
+GPU 0: NVIDIA GeForce GTX 1060 6GB (UUID: GPU-811027d8-8eb1-f08b-9cb2-24817c394031)
+#
+===== RUN VECTORADD =====
+[Vector addition of 50000 elements]
+Copy input data from the host memory to the CUDA device
+CUDA kernel launch with 196 blocks of 256 threads
+Copy output data from the CUDA device to the host memory
+Test PASSED
+Done
+
+# pod 2
+===== NVIDIA-SMI (visible devices) =====
+GPU 0: NVIDIA GeForce GTX 1070 (UUID: GPU-9b6d7281-d5fc-2d68-1527-62d3ce658818)
+#
+===== RUN VECTORADD =====
+[Vector addition of 50000 elements]
+Copy input data from the host memory to the CUDA device
+CUDA kernel launch with 196 blocks of 256 threads
+Copy output data from the CUDA device to the host memory
+Test PASSED
+Done
+```
+
+### Verification one pod two GPUs computing
+
+- TBD
 
 ### Uninstall RKE2
 
