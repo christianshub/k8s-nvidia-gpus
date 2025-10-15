@@ -4,6 +4,7 @@ metadata:
   name: gpu-operator
   namespace: gpu-operator
 spec:
+  timeout: 90m
   interval: 1m
   chart:
     spec:
