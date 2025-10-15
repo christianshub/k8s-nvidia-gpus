@@ -8,6 +8,9 @@ spec:
   install:
     createNamespace: true
     timeout: 90m
+    remediation:
+      retries: 0                   # dont keep retrying
+      remediateLastFailure: false  # dont auto-uninstall after a failed install
   interval: 1m
   chart:
     spec:
