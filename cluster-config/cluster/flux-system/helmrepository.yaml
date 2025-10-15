@@ -5,4 +5,5 @@ metadata:
   namespace: flux-system
 spec:
   interval: 1h
-  url: https://helm.ngc.nvidia.com/nvidia
+  url: https://nvidia.github.io/gpu-operator
+  

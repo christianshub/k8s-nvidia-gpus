@@ -4,6 +4,9 @@ metadata:
   name: gpu-operator
   namespace: gpu-operator
 spec:
+  targetNamespace: gpu-operator
+  install:
+    createNamespace: true
   interval: 1m
   chart:
     spec:
