@@ -1,7 +1,7 @@
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
-  name: nvidia
+  name: ghcr-nvidia-helm-remote
   namespace: flux-system
 spec:
   interval: 1h

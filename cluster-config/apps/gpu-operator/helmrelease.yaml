@@ -14,7 +14,7 @@ spec:
       version: "v25.3.4"
       sourceRef:
         kind: HelmRepository
-        name: nvidia
+        name: ghcr-nvidia-helm-remote
         namespace: flux-system
   values:
     toolkit:
