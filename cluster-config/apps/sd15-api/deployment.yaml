@@ -27,17 +27,18 @@ spec:
             cd /app
             export PIP_NO_CACHE_DIR=${PIP_NO_CACHE_DIR:-1}
             REQ_HASH=$(sha256sum requirements.txt | awk '{print $1}')
-            STAMP_DIR=/models/deps
-            STAMP_FILE="${STAMP_DIR}/.pip-${REQ_HASH}"
-            mkdir -p "${STAMP_DIR}"
-            if [ ! -f "${STAMP_FILE}" ]; then
-              echo "Installing python dependencies (hash=${REQ_HASH})"
-              pip install --no-cache-dir -r requirements.txt
-              find "${STAMP_DIR}" -maxdepth 1 -type f -name '.pip-*' -not -name ".pip-${REQ_HASH}" -delete || true
-              touch "${STAMP_FILE}"
+            DEPS_DIR="/models/appdeps/${REQ_HASH}"
+            if [ ! -f "${DEPS_DIR}/.installed" ]; then
+              echo "Installing python dependencies into ${DEPS_DIR}"
+              rm -rf "${DEPS_DIR}"
+              mkdir -p "${DEPS_DIR}"
+              pip install --no-cache-dir -r requirements.txt --target "${DEPS_DIR}"
+              find /models/appdeps -maxdepth 1 -mindepth 1 -type d ! -path "${DEPS_DIR}" -exec rm -rf {} +
+              touch "${DEPS_DIR}/.installed"
             else
-              echo "Python dependencies already installed for ${REQ_HASH}, skipping pip install"
+              echo "Using cached dependencies in ${DEPS_DIR}"
             fi
+            export PYTHONPATH="/app:${DEPS_DIR}:${PYTHONPATH:-}"
             python -m uvicorn app:app --host 0.0.0.0 --port 8000
         env:
           - { name: NVIDIA_VISIBLE_DEVICES, value: "all" }

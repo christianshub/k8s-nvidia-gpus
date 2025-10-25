@@ -13,12 +13,17 @@ data:
     accelerate==0.34.2
     safetensors==0.4.4
   app.py: |
-    import io, logging, os, time
+    import base64
+    import io
+    import logging
+    import os
+    import time
     from contextlib import nullcontext
+    from threading import Lock
     import torch
     from fastapi import FastAPI, HTTPException
     from pydantic import BaseModel
-    from fastapi.responses import Response
+    from fastapi.responses import HTMLResponse, Response
     from diffusers import StableDiffusionPipeline
 
     MODEL_ID = os.getenv("MODEL_ID", "runwayml/stable-diffusion-v1-5")
@@ -29,6 +34,8 @@ data:
     logger.setLevel(logging.INFO)
 
     app = FastAPI(title="SD15 Minimal API")
+    _LAST_IMAGE: bytes | None = None
+    _LAST_LOCK = Lock()
 
     pipe = StableDiffusionPipeline.from_pretrained(MODEL_ID, torch_dtype=TORCH_DTYPE)
     pipe.enable_attention_slicing()
@@ -52,6 +59,28 @@ data:
     @app.get("/healthz")
     def healthz():
         return {"ok": True}
+
+    @app.get("/", response_class=HTMLResponse)
+    def index():
+        if _LAST_IMAGE is None:
+            return "<h1>SD1.5 GPU API</h1><p>No image generated yet. POST /generate to create one.</p>"
+        preview = base64.b64encode(_LAST_IMAGE).decode("ascii")
+        return f"""
+        <html>
+          <head><title>SD1.5 Demo</title></head>
+          <body style="background:#0b0b0f;color:#f0f0f0;font-family:sans-serif;">
+            <h1>Latest image</h1>
+            <img src="data:image/png;base64,{preview}" alt="latest image" style="max-width:90vw;height:auto;border:3px solid #333;border-radius:8px;" />
+            <p>POST <code>/generate</code> with a prompt to update this preview.</p>
+          </body>
+        </html>
+        """
+
+    @app.get("/last")
+    def last_image():
+        if _LAST_IMAGE is None:
+            raise HTTPException(404, "No image generated yet")
+        return Response(content=_LAST_IMAGE, media_type="image/png")
 
     @app.post("/generate")
     def generate(req: GenReq):
@@ -79,9 +108,13 @@ data:
                 width=req.width or 512,
                 height=req.height or 512,
                 generator=gen
-            ).images[0]
+        ).images[0]
         buf = io.BytesIO()
         image.save(buf, format="PNG")
         latency = time.time() - t0
         logger.info("Completed generation in %.2fs", latency)
-        return Response(content=buf.getvalue(), media_type="image/png", headers={"X-Gen-Time": f"{latency:.2f}s"})
+        png = buf.getvalue()
+        global _LAST_IMAGE
+        with _LAST_LOCK:
+            _LAST_IMAGE = png
+        return Response(content=png, media_type="image/png", headers={"X-Gen-Time": f"{latency:.2f}s"})

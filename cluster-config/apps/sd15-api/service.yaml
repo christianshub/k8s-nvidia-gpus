@@ -4,9 +4,10 @@ metadata:
   name: sd15-api
   namespace: sd15-api
 spec:
-  type: ClusterIP
+  type: NodePort
   selector: { app: sd15-api }
   ports:
     - name: http
       port: 80
       targetPort: http
+      nodePort: 30800
