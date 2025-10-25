@@ -24,15 +24,21 @@ spec:
         args:
           - |
             set -euo pipefail
+            cd /app
             export PIP_NO_CACHE_DIR=${PIP_NO_CACHE_DIR:-1}
-            DEPS_DIR=${DEPS_DIR:-/models/appdeps}
-            mkdir -p "${DEPS_DIR}"
-            if [ ! -f "${DEPS_DIR}/.installed" ]; then
-              pip install --no-cache-dir -r /app/requirements.txt --target "${DEPS_DIR}"
-              touch "${DEPS_DIR}/.installed"
+            REQ_HASH=$(sha256sum requirements.txt | awk '{print $1}')
+            STAMP_DIR=/models/deps
+            STAMP_FILE="${STAMP_DIR}/.pip-${REQ_HASH}"
+            mkdir -p "${STAMP_DIR}"
+            if [ ! -f "${STAMP_FILE}" ]; then
+              echo "Installing python dependencies (hash=${REQ_HASH})"
+              pip install --no-cache-dir -r requirements.txt
+              find "${STAMP_DIR}" -maxdepth 1 -type f -name '.pip-*' -not -name ".pip-${REQ_HASH}" -delete || true
+              touch "${STAMP_FILE}"
+            else
+              echo "Python dependencies already installed for ${REQ_HASH}, skipping pip install"
             fi
-            export PYTHONPATH="/app:${DEPS_DIR}:${PYTHONPATH:-}"
-            uvicorn app:app --host 0.0.0.0 --port 8000
+            python -m uvicorn app:app --host 0.0.0.0 --port 8000
         env:
           - { name: NVIDIA_VISIBLE_DEVICES, value: "all" }
           - { name: NVIDIA_DRIVER_CAPABILITIES, value: "compute,utility" }
@@ -41,7 +47,6 @@ spec:
           - { name: VAE_CPU, value: "false" }
           - { name: TRANSFORMERS_CACHE, value: "/models/.cache/huggingface" }
           - { name: HF_HOME, value: "/models/.cache/huggingface" }
-          - { name: DEPS_DIR, value: "/models/appdeps" }
           - { name: PYTORCH_CUDA_ALLOC_CONF, value: "max_split_size_mb:128" }
           - { name: HF_HUB_DISABLE_SYMLINKS_WARNING, value: "1" }
         volumeMounts:
