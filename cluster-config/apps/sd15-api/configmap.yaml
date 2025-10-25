@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sd15-app
+  namespace: sd15-api
+data:
+  requirements.txt: |
+    fastapi==0.115.0
+    uvicorn[standard]==0.30.6
+    # torch 2.3.1 (CUDA 11.8) is baked into the pytorch/pytorch:2.3.1-cuda11.8 image
+    transformers==4.44.2
+    diffusers==0.30.2
+    accelerate==0.34.2
+    safetensors==0.4.4
+  app.py: |
+    import io, logging, os, time
+    from contextlib import nullcontext
+    import torch
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel
+    from fastapi.responses import Response
+    from diffusers import StableDiffusionPipeline
+
+    MODEL_ID = os.getenv("MODEL_ID", "runwayml/stable-diffusion-v1-5")
+    TORCH_DTYPE = torch.float16 if torch.cuda.is_available() else torch.float32
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("sd15-api")
+    logger.setLevel(logging.INFO)
+
+    app = FastAPI(title="SD15 Minimal API")
+
+    pipe = StableDiffusionPipeline.from_pretrained(MODEL_ID, torch_dtype=TORCH_DTYPE)
+    pipe.enable_attention_slicing()
+    pipe.enable_vae_slicing()
+    if os.getenv("VAE_CPU", "false").lower() in ("1","true","yes"):
+        pipe.vae.to("cpu")
+    if torch.cuda.is_available():
+        pipe = pipe.to("cuda")
+        logger.info("Loaded %s on CUDA (%s)", MODEL_ID, TORCH_DTYPE)
+    else:
+        logger.warning("CUDA unavailable, running %s on CPU", MODEL_ID)
+
+    class GenReq(BaseModel):
+        prompt: str
+        steps: int | None = 30
+        guidance_scale: float | None = 7.5
+        seed: int | None = None
+        width: int | None = 512
+        height: int | None = 512
+
+    @app.get("/healthz")
+    def healthz():
+        return {"ok": True}
+
+    @app.post("/generate")
+    def generate(req: GenReq):
+        if not req.prompt or len(req.prompt.strip()) == 0:
+            raise HTTPException(400, "prompt is required")
+        gen = None
+        if req.seed is not None:
+            gen = torch.Generator(device="cuda" if torch.cuda.is_available() else "cpu").manual_seed(req.seed)
+        t0 = time.time()
+        logger.info(
+            "Generating prompt='%s' steps=%s guidance=%.2f seed=%s size=%sx%s",
+            req.prompt,
+            req.steps or 30,
+            req.guidance_scale or 7.5,
+            req.seed or "auto",
+            req.width or 512,
+            req.height or 512,
+        )
+        precision = torch.autocast(device_type="cuda", dtype=TORCH_DTYPE) if torch.cuda.is_available() else nullcontext()
+        with precision:
+            image = pipe(
+                req.prompt,
+                num_inference_steps=req.steps or 30,
+                guidance_scale=req.guidance_scale or 7.5,
+                width=req.width or 512,
+                height=req.height or 512,
+                generator=gen
+            ).images[0]
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        latency = time.time() - t0
+        logger.info("Completed generation in %.2fs", latency)
+        return Response(content=buf.getvalue(), media_type="image/png", headers={"X-Gen-Time": f"{latency:.2f}s"})
