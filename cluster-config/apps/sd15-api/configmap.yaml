@@ -7,7 +7,8 @@ data:
   requirements.txt: |
     fastapi==0.115.0
     uvicorn[standard]==0.30.6
-    # torch 2.3.1 (CUDA 11.8) is baked into the pytorch/pytorch:2.3.1-cuda11.8 image
+    torch==2.3.1
+    torchvision==0.18.1
     transformers==4.44.2
     diffusers==0.30.2
     accelerate==0.34.2

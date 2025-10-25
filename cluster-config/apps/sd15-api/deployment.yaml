@@ -50,6 +50,7 @@ spec:
           - { name: HF_HOME, value: "/models/.cache/huggingface" }
           - { name: PYTORCH_CUDA_ALLOC_CONF, value: "max_split_size_mb:128" }
           - { name: HF_HUB_DISABLE_SYMLINKS_WARNING, value: "1" }
+          - { name: PIP_EXTRA_INDEX_URL, value: "https://download.pytorch.org/whl/cu118" }
         volumeMounts:
           - { name: app, mountPath: /app, readOnly: true }
           - { name: models, mountPath: /models }
