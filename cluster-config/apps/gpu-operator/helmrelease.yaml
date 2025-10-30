@@ -1,0 +1,29 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: gpu-operator
+  namespace: gpu-operator
+spec:
+  timeout: 90m
+  interval: 1m
+  chart:
+    spec:
+      chart: gpu-operator
+      version: "v25.3.4"
+      sourceRef:
+        kind: HelmRepository
+        name: ghcr-nvidia-helm-remote
+        namespace: flux-system
+  values:
+    toolkit:
+      enabled: true
+      version: v1.17.8-ubi8
+      env:
+        - name: CONTAINERD_SOCKET
+          value: /run/k3s/containerd/containerd.sock
+        - name: CONTAINERD_CONFIG
+          value: /var/lib/rancher/rke2/agent/etc/containerd/config.toml
+        - name: CONTAINERD_RUNTIME_CLASS
+          value: nvidia
+        - name: CONTAINERD_SET_AS_DEFAULT
+          value: "true"

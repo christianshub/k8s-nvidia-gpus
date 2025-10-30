@@ -1,0 +1,105 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: sd15-api
+  namespace: sd15-api
+spec:
+  interval: 5m
+  timeout: 30m
+  chart:
+    spec:
+      chart: app-template
+      version: 3.5.1
+      sourceRef:
+        kind: HelmRepository
+        name: bjw-s
+        namespace: flux-system
+
+  install:
+    remediation: { retries: 3 }
+  upgrade:
+    remediation: { retries: 3 }
+
+  values:
+    controllers:
+      sd15:
+        replicas: 1
+        containers:
+          api:
+            # Public CUDA+PyTorch image — no private registry needed
+            image:
+              repository: pytorch/pytorch
+              tag: 2.3.1-cuda11.8-cudnn8-runtime
+              pullPolicy: IfNotPresent
+            # Start-up: install deps, then run the API
+            command: ["bash","-lc"]
+            args:
+              - |
+                pip install --no-cache-dir -r /app/requirements.txt && \
+                uvicorn app:app --host 0.0.0.0 --port 8000
+            env:
+              - { name: NVIDIA_VISIBLE_DEVICES, value: "all" }
+              - { name: NVIDIA_DRIVER_CAPABILITIES, value: "compute,utility" }
+              - { name: MODEL_ID, value: "runwayml/stable-diffusion-v1-5" }
+              # Flip to "true" if the 1060 OOMs
+              - { name: VAE_CPU, value: "false" }
+              - { name: TRANSFORMERS_CACHE, value: "/models/.cache/huggingface" }
+              - { name: HF_HOME, value: "/models/.cache/huggingface" }
+            resources:
+              limits:   { nvidia.com/gpu: 1 }
+              requests: { cpu: "500m", memory: "2Gi" }
+            ports:
+              - { name: http, containerPort: 8000 }
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet: { path: /healthz, port: 8000 }
+                  initialDelaySeconds: 5
+                  periodSeconds: 5
+        # Optional: pin to a preffered node (uncomment if you want)
+        # nodeSelector: { gpu: "1070" }
+
+    service:
+      sd15:
+        controller: sd15
+        ports:
+          http:
+            port: 80
+            targetPort: http
+
+    persistence:
+      # Cache models so you only download once
+      models:
+        enabled: true
+        type: pvc
+        accessMode: ReadWriteOnce
+        size: 15Gi
+        advancedMounts:
+          sd15:
+            api:
+              - path: /models
+
+      # Mount your app from the ConfigMap (read-only)
+      app:
+        enabled: true
+        type: configMap
+        name: sd15-app
+        defaultMode: 0444
+        advancedMounts:
+          sd15:
+            api:
+              - path: /app
+                readOnly: true
+
+    ingress:
+      enabled: false
+      # className: nginx
+      # hosts:
+      #   - host: sd15-api.local
+      #     paths:
+      #       - path: /
+      #         service:
+      #           identifier: sd15
+      #           port: http

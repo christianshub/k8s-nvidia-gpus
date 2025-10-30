@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sd15-api
+  namespace: sd15-api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: sd15-api }
+  template:
+    metadata:
+      labels: { app: sd15-api }
+    spec:
+      runtimeClassName: nvidia
+      # Optional: pin to a specific GPU node
+      # nodeSelector: { gpu: "1070" }
+      containers:
+      - name: api
+        image: pytorch/pytorch:2.3.1-cuda11.8-cudnn8-runtime
+        imagePullPolicy: IfNotPresent
+        command: ["bash","-lc"]
+        args:
+          - |
+            set -euo pipefail
+            cd /app
+            export PIP_NO_CACHE_DIR=${PIP_NO_CACHE_DIR:-1}
+            REQ_HASH=$(sha256sum requirements.txt | awk '{print $1}')
+            DEPS_DIR="/models/appdeps/${REQ_HASH}"
+            if [ ! -f "${DEPS_DIR}/.installed" ]; then
+              echo "Installing python dependencies into ${DEPS_DIR}"
+              rm -rf "${DEPS_DIR}"
+              mkdir -p "${DEPS_DIR}"
+              pip install --no-cache-dir -r requirements.txt --target "${DEPS_DIR}"
+              find /models/appdeps -maxdepth 1 -mindepth 1 -type d ! -path "${DEPS_DIR}" -exec rm -rf {} +
+              touch "${DEPS_DIR}/.installed"
+            else
+              echo "Using cached dependencies in ${DEPS_DIR}"
+            fi
+            export PYTHONPATH="/app:${DEPS_DIR}:${PYTHONPATH:-}"
+            python -m uvicorn app:app --host 0.0.0.0 --port 8000
+        env:
+          - { name: NVIDIA_VISIBLE_DEVICES, value: "all" }
+          - { name: NVIDIA_DRIVER_CAPABILITIES, value: "compute,utility" }
+          - { name: MODEL_ID, value: "runwayml/stable-diffusion-v1-5" }
+          # Flip to true on the 1060 if you hit OOM
+          - { name: VAE_CPU, value: "false" }
+          - { name: TRANSFORMERS_CACHE, value: "/models/.cache/huggingface" }
+          - { name: HF_HOME, value: "/models/.cache/huggingface" }
+          - { name: PYTORCH_CUDA_ALLOC_CONF, value: "max_split_size_mb:128" }
+          - { name: HF_HUB_DISABLE_SYMLINKS_WARNING, value: "1" }
+          - { name: PIP_EXTRA_INDEX_URL, value: "https://download.pytorch.org/whl/cu118" }
+        volumeMounts:
+          - { name: app, mountPath: /app, readOnly: true }
+          - { name: models, mountPath: /models }
+        ports:
+          - { name: http, containerPort: 8000 }
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "4Gi"
+          limits:
+            cpu: "2"
+            memory: "10Gi"
+            nvidia.com/gpu: 1
+        readinessProbe:
+          httpGet: { path: /healthz, port: 8000 }
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+        - name: app
+          configMap:
+            name: sd15-app
+            defaultMode: 0444
+        - name: models
+          persistentVolumeClaim:
+            claimName: sd15-cache

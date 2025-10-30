@@ -1,0 +1,9 @@
+# Single node demo setup
+rke2_ha_mode: false
+rke2_version: "v1.32.8+rke2r1"
+rke2_role: server
+rke2_node_name: singlenode
+rke2_node_ip: "{{ ansible_host }}"
+rke2_server: "https://{{ ansible_host }}:9345"
+rke2_token: "my-secure-token"
+rke2_cni: [cilium]
