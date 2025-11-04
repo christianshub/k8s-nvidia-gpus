@@ -364,7 +364,7 @@ Done
 
 ```bash
 cd rke2-installation/
-ansible-playbook -i inventory.ini uninstall-rke2.yaml
+ansible-playbook -i inventory.ini uninstall-rke2.yaml -K
 ```
 
 ## Working remotely using tailscale
