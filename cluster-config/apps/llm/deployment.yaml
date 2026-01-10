@@ -29,7 +29,7 @@ spec:
               value: https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf
           args:
             - |
-              set -euo pipefail
+              set -eu
               mkdir -p /models
               if [ ! -s "/models/${MODEL_FILE}" ]; then
                 echo "Downloading ${MODEL_FILE}..."
@@ -59,7 +59,7 @@ spec:
               value: "compute,utility"
           args:
             - |
-              set -euo pipefail
+              set -eu
               exec llama-server \
                 -m "/models/${MODEL_FILE}" \
                 --host 0.0.0.0 \
