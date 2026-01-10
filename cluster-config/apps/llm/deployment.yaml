@@ -65,7 +65,7 @@ spec:
           args:
             - |
               set -eu
-              exec llama-server \
+              exec /app/llama-server \
                 -m "/models/${MODEL_FILE}" \
                 --host 0.0.0.0 \
                 --port 8080 \
