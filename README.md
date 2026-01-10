@@ -18,7 +18,7 @@ Tested with the following setup:
 [Pass](https://www.passwordstore.org/) and [direnv](https://direnv.net/) needs to be installed with a valid GitHub token flux can use. Pass and direnv is used to safely store our GitHub token (in a production setup you'd want to use a GitHub Service account that flux can leverage).
  
 
-```bash
+```sh
 sudo apt install pass    # also available on Fedora/RHEL through dnf
 gpg --full-generate-key  # exposes a gpg key
 pass init <key>          # initiate pass database
@@ -37,14 +37,14 @@ env | grep GITHUB_TOKEN  # verification
 
 1. Update your machine
 
-    ```bash
+    ```sh
     sudo subscription-nmanager register
     sudo dnf update -y
     ```
 
 2. Verify a GPU is present:
 
-    ```bash
+    ```sh
     lspci -nnk | egrep -A3 -i 'nvidia|vga|3d|audio'
     # Example output: VGA compatible controller [0300]: NVIDIA Corporation GP104 [GeForce GTX 1070] [10de:1b81] (rev a1)
     ```
@@ -53,14 +53,14 @@ env | grep GITHUB_TOKEN  # verification
 
     Edit `/etc/selinux/config` so it looks like this:
 
-    ```bash
+    ```sh
     SELINUX=permissive
     SELINUXTYPE=targeted
     ```
 
     Verify:
 
-    ```bash
+    ```sh
     $ getenforce
     Permissive
     ```
@@ -69,20 +69,20 @@ env | grep GITHUB_TOKEN  # verification
 
 4. Verify nouveau doesn't load (this is the open source NVIDIA GPU driver) 
 
-    ```bash
+    ```sh
     echo -e "blacklist nouveau\noptions nouveau modeset=0" | sudo tee /etc/modprobe.d/blacklist-nouveau.conf
     sudo dracut -f
     ```
 
 5. Consider disabling the firewall while testing:
 
-    ```bash
+    ```sh
     sudo systemctl disable --now firewalld
     ```
 
     Alternatively, allow the following:
 
-    ```bash
+    ```sh
     # API server
     sudo firewall-cmd --add-port=6443/tcp --permanent
     # Supervisor tunnel
@@ -98,14 +98,14 @@ env | grep GITHUB_TOKEN  # verification
 
     Inspect the rules:
 
-    ```bash
+    ```sh
     sudo firewall-cmd --list-all
     sudo firewall-cmd --list-ports
     ```
 
     To clean up, remove them again if Kubernetes access is no longer needed:
 
-    ```bash
+    ```sh
     # Remove permanently
     sudo firewall-cmd --remove-port=6443/tcp --permanent
     sudo firewall-cmd --remove-port=9345/tcp --permanent
@@ -117,7 +117,7 @@ env | grep GITHUB_TOKEN  # verification
 
 6. Shutdown/reboot machine
 
-    ```bash
+    ```sh
     sudo poweroff
     # sudo reboot
     ```
@@ -131,21 +131,21 @@ env | grep GITHUB_TOKEN  # verification
 
     Intel:
 
-    ```bash
+    ```sh
     sudo sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="/GRUB_CMDLINE_LINUX_DEFAULT="amd_iommu=on iommu=pt /' /etc/default/grub
     sudo update-grub
     ```
 
     AMD:
 
-    ```bash
+    ```sh
     sudo sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="/GRUB_CMDLINE_LINUX_DEFAULT="amd_iommu=on iommu=pt /' /etc/default/grub
     sudo update-grub
     ```
 
 2. Load vfio modules at boot
 
-    ```bash
+    ```sh
     sudo tee /etc/modules <<'EOF'
     vfio
     vfio_iommu_type1
@@ -156,7 +156,7 @@ env | grep GITHUB_TOKEN  # verification
 
 3. Bind your GPU to vfio-pci (replace IDs with yours)
 
-    ```bash
+    ```sh
     # Find your device IDs
     lspci -nn | egrep -i 'nvidia|vga|3d|audio'
     # Example (GTX 1070): GPU 10de:1b81, HDMI audio 10de:10f0
@@ -168,7 +168,7 @@ env | grep GITHUB_TOKEN  # verification
 
 4. Verify after reboot
    
-    ```bash
+    ```sh
     dmesg | egrep -i 'DMAR|IOMMU'   # look for "IOMMU enabled"
     lspci -k -s 01:00.0             # look for "kernel driver in use: vfio-pci"
     lspci -k -s 01:00.1             # look for "kernel driver in use: vfio-pci"
@@ -178,7 +178,7 @@ env | grep GITHUB_TOKEN  # verification
   
     Compute only (no GUI):
 
-    ```bash
+    ```sh
     qm set <VMID> -vga none
     qm set <VMID> -hostpci0 01:00.0
     qm set <VMID> -hostpci1 01:00.1
@@ -193,31 +193,35 @@ The following is to be executed on your RHEL8 OS - from your workstation (throug
 
 ### Steps
 
-1. Deploy and install RKE2
+0. ssh-copy-id into the target VM
+   
+1. Edit IP in rke2-installation/inventory.ini
 
-    ```bash
+2. Deploy and install RKE2
+
+    ```sh
     cd rke2-installation/
     ansible-playbook -i inventory.ini install-rke2.yaml -K
     ```
 
-2. (Optional) You can follow along from within the RHEL8 OS:
+3. (Optional) You can follow along from within the RHEL8 OS:
 
-    ```bash
+    ```sh
     ssh <user>@<rke2-node>
     sudo journalctl -u rke2-server -n -f
     watch sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml -n kube-system get pods -o wide # in another console 
     ```
 
-3. Fetch kubeconfig
+4. Fetch kubeconfig
 
-    ```bash
+    ```sh
     cd rke2-installation/
     ansible-playbook -i inventory.ini fetch-kubeconfig.yaml -K
     ```
 
-4. Bootstrap flux:
+5. Bootstrap flux:
  
-    ```bash
+    ```sh
     kubectl create namespace flux-system
     kubectl create secret generic flux-system \
     --namespace=flux-system \
@@ -225,9 +229,9 @@ The following is to be executed on your RHEL8 OS - from your workstation (throug
     --from-literal=password="${GITHUB_TOKEN}"
     ```
 
-5. Apply components (NVIDIAs GPU operator)
+6. Apply components (NVIDIAs GPU operator)
 
-    ```bash
+    ```sh
     kubectl apply -k cluster-config/cluster/flux-system/
     ```
 
@@ -235,7 +239,7 @@ The following is to be executed on your RHEL8 OS - from your workstation (throug
 
 Run the `vectoradd` verification test like shown in https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html#cuda-vectoradd:
 
-```bash
+```sh
 cat <<'EOF' | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
@@ -259,7 +263,7 @@ EOF
 
 Expected result from running `kubectl logs cuda-vectoradd-pc9t9`:
 
-```bash                                                      
+```sh                                                      
 [Vector addition of 50000 elements]
 Copy input data from the host memory to the CUDA device
 CUDA kernel launch with 196 blocks of 256 threads
@@ -270,7 +274,7 @@ Done
 
 ### Verification two GPUs did computing in parallel
 
-```bash
+```sh
 cat <<'EOF' | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
@@ -321,7 +325,7 @@ EOF
 
 Check results:
 
-```bash
+```sh
 kubectl get pods -l job-name=two-pods-one-gpu
 for p in $(kubectl get pods -l job-name=two-pods-one-gpu -o name); do
   echo "==== $p ===="; kubectl logs "$p"; echo; 
@@ -362,7 +366,7 @@ Done
 
 ### Uninstall RKE2
 
-```bash
+```sh
 cd rke2-installation/
 ansible-playbook -i inventory.ini uninstall-rke2.yaml -K
 ```
@@ -424,7 +428,7 @@ Could be RHEL that blocks access by not allowing the needed ports k8s uses.
 
 1. Do a quick netcat inspection from your workstation:
 
-    ```bash
+    ```sh
     $ nc -vz <k8s-node-ip> 6443
     Unable to connect to the server: dial tcp <k8s-node-ip>:6443: connect: no route to host
     ```
@@ -433,20 +437,20 @@ Could be RHEL that blocks access by not allowing the needed ports k8s uses.
 
 1. If the box has multiple interfaces, make sure firewalld allows from your client subnet:
 
-    ```bash
+    ```sh
     sudo firewall-cmd --add-rich-rule='rule family="ipv4" source address="192.168.0.0/24" port port="6443" protocol="tcp" accept' --permanent
     sudo firewall-cmd --reload
     ```
 1. Access the kubernetes node and inspect firewall rules
 
-    ```bash
+    ```sh
     sudo firewall-cmd --list-all
     sudo firewall-cmd --list-ports
     ```
 
 1. Apply firewall rules:
 
-    ```bash
+    ```sh
     # API server
     sudo firewall-cmd --add-port=6443/tcp --permanent
     # Supervisor tunnel
@@ -462,7 +466,7 @@ Could be RHEL that blocks access by not allowing the needed ports k8s uses.
 
 1. To clean up, remove them again if Kubernetes access is no longer needed:
 
-    ```bash
+    ```sh
     # Remove permanently
     sudo firewall-cmd --remove-port=6443/tcp --permanent
     sudo firewall-cmd --remove-port=9345/tcp --permanent
@@ -476,7 +480,7 @@ Could be RHEL that blocks access by not allowing the needed ports k8s uses.
 
 We are right now deploying a one-node cluster, whereas cilium expects a HA cluster. To remove one operator pod, run the following:
 
-```bash
+```sh
 kubectl -n kube-system scale deploy cilium-operator --replicas=1
 kubectl -n kube-system get deploy cilium-operator
 ```
@@ -491,7 +495,7 @@ kubectl -n kube-system get deploy cilium-operator
   - Issue: Pods Pending ("runtime not found") leading to the operator couldn't update containerd.  
   - Debug: Double-check the RKE2 env vars:
   
-    ```bash
+    ```sh
     CONTAINERD_SOCKET=/run/k3s/containerd/containerd.sock
     CONTAINERD_CONFIG=/var/lib/rancher/rke2/agent/etc/containerd/config.toml
     ```
