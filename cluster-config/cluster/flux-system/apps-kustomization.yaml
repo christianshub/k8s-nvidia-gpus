@@ -25,3 +25,19 @@ spec:
 #   sourceRef:
 #     kind: GitRepository
 #     name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+kind: Kustomization
+metadata:
+  name: llm
+  namespace: llm
+spec:
+  interval: 1m
+  path: "./cluster-config/apps/llm"
+  prune: true
+  dependsOn:
+    - name: nvidia
+      namespace: gpu-operator
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
