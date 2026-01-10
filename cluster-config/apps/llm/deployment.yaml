@@ -36,10 +36,23 @@ spec:
             - |
               set -eu
               mkdir -p /models
+              
+              # FIX: If the file is smaller than 10MB, it's a fake HTML error page. Delete it.
+              if [ -f "/models/${MODEL_FILE}" ]; then
+                FILE_SIZE=$(stat -c%s "/models/${MODEL_FILE}")
+                if [ "$FILE_SIZE" -lt 10000000 ]; then
+                  echo "Detected invalid small file (size: $FILE_SIZE). Deleting to redownload..."
+                  rm "/models/${MODEL_FILE}"
+                fi
+              fi
+
               if [ ! -s "/models/${MODEL_FILE}" ]; then
                 echo "Downloading ${MODEL_FILE}..."
-                curl -L --retry 5 --retry-delay 5 -o "/models/${MODEL_FILE}.tmp" "${MODEL_URL}"
+                # Added -f to fail the container if the URL returns a 404
+                curl -fL --retry 5 --retry-delay 5 -o "/models/${MODEL_FILE}.tmp" "${MODEL_URL}"
                 mv "/models/${MODEL_FILE}.tmp" "/models/${MODEL_FILE}"
+              else
+                echo "Model already exists and verified."
               fi
           volumeMounts:
             - name: models
@@ -53,9 +66,9 @@ spec:
             - name: MODEL_FILE
               value: qwen2.5-7b-instruct-abliterated-v2.Q4_K_M.gguf
             - name: CTX_SIZE
-              value: "4096" # Qwen2.5 handles large context well; bumped slightly from 2048
+              value: "4096"
             - name: GPU_LAYERS
-              value: "35" # Setting this higher than 28 ensures 100% GPU offload
+              value: "35" 
             - name: CPU_THREADS
               value: "6"
             - name: NVIDIA_VISIBLE_DEVICES
@@ -76,7 +89,7 @@ spec:
           resources:
             limits:
               nvidia.com/gpu: 1
-              memory: 10Gi # Reduced slightly as 12Gi is plenty
+              memory: 10Gi
               cpu: "4"
             requests:
               memory: 6Gi
