@@ -31,7 +31,7 @@ spec:
             - name: MODEL_FILE
               value: qwen2.5-7b-instruct-abliterated-v2.Q4_K_M.gguf
             - name: MODEL_URL
-              value: https://huggingface.co/QuantFactory/Qwen2.5-7B-Instruct-abliterated-v2-GGUF/resolve/main/qwen2.5-7b-instruct-abliterated-v2.Q4_K_M.gguf
+              value: https://huggingface.co/mradermacher/Qwen2.5-7B-Instruct-abliterated-v2-GGUF/resolve/main/Qwen2.5-7B-Instruct-abliterated-v2.Q4_K_M.gguf
           args:
             - |
               set -eu
