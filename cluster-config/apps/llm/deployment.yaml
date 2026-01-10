@@ -18,6 +18,9 @@ spec:
         - name: fetch-model
           image: curlimages/curl:8.7.1
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
           command: ["/bin/sh","-lc"]
           env:
             - name: MODEL_FILE
