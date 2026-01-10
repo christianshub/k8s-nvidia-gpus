@@ -19,62 +19,35 @@ spec:
         app: coder-llm
     spec:
       runtimeClassName: nvidia
-      initContainers:
-        - name: fetch-model
-          image: curlimages/curl:8.7.1
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-          command: ["/bin/sh","-lc"]
-          env:
-            - name: MODEL_FILE
-              value: qwen2.5-coder-7b-instruct-q4_k_m.gguf
-            - name: MODEL_URL
-              value: https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf
-          args:
-            - |
-              set -eu
-              mkdir -p /models
-              if [ ! -s "/models/${MODEL_FILE}" ]; then
-                echo "Downloading ${MODEL_FILE}..."
-                curl -L --retry 5 --retry-delay 5 -o "/models/${MODEL_FILE}.tmp" "${MODEL_URL}"
-                mv "/models/${MODEL_FILE}.tmp" "/models/${MODEL_FILE}"
-              fi
-          volumeMounts:
-            - name: models
-              mountPath: /models
       containers:
         - name: server
-          image: ghcr.io/ggml-org/llama.cpp:server-cuda
+          image: vllm/vllm-openai:latest
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh","-lc"]
+          args:
+            - "--model"
+            - "Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
+            - "--quantization"
+            - "awq"
+            - "--dtype"
+            - "auto"
+            - "--max-model-len"
+            - "4096"
+            - "--gpu-memory-utilization"
+            - "0.85"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
           env:
-            - name: MODEL_FILE
-              value: qwen2.5-coder-7b-instruct-q4_k_m.gguf
-            - name: CTX_SIZE
-              value: "4096"
-            - name: GPU_LAYERS
-              value: "24"
-            - name: CPU_THREADS
-              value: "6"
+            - name: HF_HOME
+              value: /models/hf
             - name: NVIDIA_VISIBLE_DEVICES
               value: "all"
             - name: NVIDIA_DRIVER_CAPABILITIES
               value: "compute,utility"
-          args:
-            - |
-              set -eu
-              exec /app/llama-server \
-                -m "/models/${MODEL_FILE}" \
-                --host 0.0.0.0 \
-                --port 8080 \
-                --ctx-size "${CTX_SIZE}" \
-                --n-gpu-layers "${GPU_LAYERS}" \
-                --threads "${CPU_THREADS}"
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8000
           resources:
             limits:
               nvidia.com/gpu: 1
@@ -86,7 +59,13 @@ spec:
           volumeMounts:
             - name: models
               mountPath: /models
+            - name: shm
+              mountPath: /dev/shm
       volumes:
         - name: models
           persistentVolumeClaim:
             claimName: llm-models
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "2Gi"
