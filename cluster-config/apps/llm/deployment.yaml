@@ -1,7 +1,111 @@
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: coder-llm
+#   namespace: llm
+# spec:
+#   replicas: 1
+#   strategy:
+#     type: RollingUpdate
+#     rollingUpdate:
+#       maxSurge: 0
+#       maxUnavailable: 1
+#   selector:
+#     matchLabels:
+#       app: coder-llm
+#   template:
+#     metadata:
+#       labels:
+#         app: coder-llm
+#     spec:
+#       runtimeClassName: nvidia
+#       initContainers:
+#         - name: fetch-model
+#           image: curlimages/curl:8.7.1
+#           imagePullPolicy: IfNotPresent
+#           securityContext:
+#             runAsUser: 0
+#             runAsGroup: 0
+#           command: ["/bin/sh","-lc"]
+#           env:
+#             - name: MODEL_FILE
+#               value: qwen2.5-7b-instruct-abliterated-v2.Q4_K_M.gguf
+#             - name: MODEL_URL
+#               value: https://huggingface.co/mradermacher/Qwen2.5-7B-Instruct-abliterated-v2-GGUF/resolve/main/Qwen2.5-7B-Instruct-abliterated-v2.Q4_K_M.gguf
+#           args:
+#             - |
+#               set -eu
+#               mkdir -p /models
+              
+#               # FIX: If the file is smaller than 10MB, it's a fake HTML error page. Delete it.
+#               if [ -f "/models/${MODEL_FILE}" ]; then
+#                 FILE_SIZE=$(stat -c%s "/models/${MODEL_FILE}")
+#                 if [ "$FILE_SIZE" -lt 10000000 ]; then
+#                   echo "Detected invalid small file (size: $FILE_SIZE). Deleting to redownload..."
+#                   rm "/models/${MODEL_FILE}"
+#                 fi
+#               fi
+
+#               if [ ! -s "/models/${MODEL_FILE}" ]; then
+#                 echo "Downloading ${MODEL_FILE}..."
+#                 # Added -f to fail the container if the URL returns a 404
+#                 curl -fL --retry 5 --retry-delay 5 -o "/models/${MODEL_FILE}.tmp" "${MODEL_URL}"
+#                 mv "/models/${MODEL_FILE}.tmp" "/models/${MODEL_FILE}"
+#               else
+#                 echo "Model already exists and verified."
+#               fi
+#           volumeMounts:
+#             - name: models
+#               mountPath: /models
+#       containers:
+#         - name: server
+#           image: ghcr.io/ggml-org/llama.cpp:server-cuda
+#           imagePullPolicy: IfNotPresent
+#           command: ["/bin/sh","-lc"]
+#           env:
+#             - name: MODEL_FILE
+#               value: qwen2.5-7b-instruct-abliterated-v2.Q4_K_M.gguf
+#             - name: CTX_SIZE
+#               value: "4096"
+#             - name: GPU_LAYERS
+#               value: "35" 
+#             - name: CPU_THREADS
+#               value: "6"
+#             - name: NVIDIA_VISIBLE_DEVICES
+#               value: "all"
+#           args:
+#             - |
+#               set -eu
+#               exec /app/llama-server \
+#                 -m "/models/${MODEL_FILE}" \
+#                 --host 0.0.0.0 \
+#                 --port 8080 \
+#                 --ctx-size "${CTX_SIZE}" \
+#                 --n-gpu-layers "${GPU_LAYERS}" \
+#                 --threads "${CPU_THREADS}"
+#           ports:
+#             - name: http
+#               containerPort: 8080
+#           resources:
+#             limits:
+#               nvidia.com/gpu: 1
+#               memory: 10Gi
+#               cpu: "4"
+#             requests:
+#               memory: 6Gi
+#               cpu: "2"
+#           volumeMounts:
+#             - name: models
+#               mountPath: /models
+#       volumes:
+#         - name: models
+#           persistentVolumeClaim:
+#             claimName: llm-models
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: coder-llm
+  name: wan-video-gen
   namespace: llm
 spec:
   replicas: 1
@@ -12,91 +116,56 @@ spec:
       maxUnavailable: 1
   selector:
     matchLabels:
-      app: coder-llm
+      app: wan-video
   template:
     metadata:
       labels:
-        app: coder-llm
+        app: wan-video
     spec:
       runtimeClassName: nvidia
       initContainers:
-        - name: fetch-model
+        - name: fetch-wan-model
           image: curlimages/curl:8.7.1
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsUser: 0
-            runAsGroup: 0
           command: ["/bin/sh","-lc"]
           env:
-            - name: MODEL_FILE
-              value: qwen2.5-7b-instruct-abliterated-v2.Q4_K_M.gguf
+            # We use the 1.3B GGUF version for your 8GB VRAM card
             - name: MODEL_URL
-              value: https://huggingface.co/mradermacher/Qwen2.5-7B-Instruct-abliterated-v2-GGUF/resolve/main/Qwen2.5-7B-Instruct-abliterated-v2.Q4_K_M.gguf
+              value: "https://huggingface.co/samuelchristlie/Wan2.1-T2V-1.3B-GGUF/resolve/main/Wan-2.1-T2V-1.3B-Q4_K_M.gguf"
+            - name: MODEL_FILE
+              value: "Wan-2.1-T2V-1.3B-Q4_K_M.gguf"
           args:
             - |
               set -eu
-              mkdir -p /models
-              
-              # FIX: If the file is smaller than 10MB, it's a fake HTML error page. Delete it.
-              if [ -f "/models/${MODEL_FILE}" ]; then
-                FILE_SIZE=$(stat -c%s "/models/${MODEL_FILE}")
-                if [ "$FILE_SIZE" -lt 10000000 ]; then
-                  echo "Detected invalid small file (size: $FILE_SIZE). Deleting to redownload..."
-                  rm "/models/${MODEL_FILE}"
-                fi
-              fi
-
-              if [ ! -s "/models/${MODEL_FILE}" ]; then
-                echo "Downloading ${MODEL_FILE}..."
-                # Added -f to fail the container if the URL returns a 404
-                curl -fL --retry 5 --retry-delay 5 -o "/models/${MODEL_FILE}.tmp" "${MODEL_URL}"
-                mv "/models/${MODEL_FILE}.tmp" "/models/${MODEL_FILE}"
-              else
-                echo "Model already exists and verified."
+              mkdir -p /models/unet
+              if [ ! -s "/models/unet/${MODEL_FILE}" ]; then
+                echo "Downloading Wan 2.1 1.3B GGUF..."
+                curl -fL -o "/models/unet/${MODEL_FILE}.tmp" "${MODEL_URL}"
+                mv "/models/unet/${MODEL_FILE}.tmp" "/models/unet/${MODEL_FILE}"
               fi
           volumeMounts:
             - name: models
               mountPath: /models
       containers:
         - name: server
-          image: ghcr.io/ggml-org/llama.cpp:server-cuda
-          imagePullPolicy: IfNotPresent
-          command: ["/bin/sh","-lc"]
+          # Using a ComfyUI image that supports GGUF and CUDA
+          image: yanwk/comfyui-boot:cuda12.1
           env:
-            - name: MODEL_FILE
-              value: qwen2.5-7b-instruct-abliterated-v2.Q4_K_M.gguf
-            - name: CTX_SIZE
-              value: "4096"
-            - name: GPU_LAYERS
-              value: "35" 
-            - name: CPU_THREADS
-              value: "6"
-            - name: NVIDIA_VISIBLE_DEVICES
-              value: "all"
-          args:
-            - |
-              set -eu
-              exec /app/llama-server \
-                -m "/models/${MODEL_FILE}" \
-                --host 0.0.0.0 \
-                --port 8080 \
-                --ctx-size "${CTX_SIZE}" \
-                --n-gpu-layers "${GPU_LAYERS}" \
-                --threads "${CPU_THREADS}"
+            - name: CLI_ARGS
+              value: "--listen 0.0.0.0 --port 8181 --highvram" # highvram allows better use of your 24GB System RAM
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8181
           resources:
             limits:
               nvidia.com/gpu: 1
-              memory: 10Gi
-              cpu: "4"
+              memory: 20Gi  # Higher memory limit to allow GGUF offloading from VRAM
+              cpu: "6"      # Using all your CPU threads for processing
             requests:
-              memory: 6Gi
-              cpu: "2"
+              memory: 12Gi
+              cpu: "4"
           volumeMounts:
             - name: models
-              mountPath: /models
+              mountPath: /root/ComfyUI/models
       volumes:
         - name: models
           persistentVolumeClaim:
