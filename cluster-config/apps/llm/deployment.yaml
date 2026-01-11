@@ -128,11 +128,11 @@ spec:
           image: curlimages/curl:8.7.1
           command: ["/bin/sh","-lc"]
           env:
-            # We use the 1.3B GGUF version for your 8GB VRAM card
+            # Corrected URL and File Name from the samuelchristlie repo
             - name: MODEL_URL
-              value: "https://huggingface.co/samuelchristlie/Wan2.1-T2V-1.3B-GGUF/resolve/main/Wan-2.1-T2V-1.3B-Q4_K_M.gguf"
+              value: "https://huggingface.co/samuelchristlie/Wan2.1-T2V-1.3B-GGUF/resolve/main/Wan2.1-T2V-1.3B-Q4_K_M.gguf"
             - name: MODEL_FILE
-              value: "Wan-2.1-T2V-1.3B-Q4_K_M.gguf"
+              value: "Wan2.1-T2V-1.3B-Q4_K_M.gguf"
           args:
             - |
               set -eu
