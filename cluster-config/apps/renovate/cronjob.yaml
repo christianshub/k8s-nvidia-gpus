@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate
+  namespace: renovate
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: renovate
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+          containers:
+            - name: renovate
+              image: renovate/renovate:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: RENOVATE_PLATFORM
+                  value: github
+                - name: RENOVATE_ENDPOINT
+                  value: https://api.github.com/
+                - name: RENOVATE_AUTODISCOVER
+                  value: "true"
+                - name: RENOVATE_AUTODISCOVER_FILTER
+                  value: "christianshub/k8s-nvidia-gpus"
+                - name: RENOVATE_GIT_AUTHOR
+                  value: "Renovate Bot <bot@users.noreply.github.com>"
+                - name: RENOVATE_LOG_LEVEL
+                  value: info
+                - name: RENOVATE_BASE_DIR
+                  value: /tmp/renovate
+                - name: RENOVATE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: renovate-secrets
+                      key: RENOVATE_TOKEN
+              volumeMounts:
+                - name: renovate-cache
+                  mountPath: /tmp/renovate
+          volumes:
+            - name: renovate-cache
+              emptyDir: {}

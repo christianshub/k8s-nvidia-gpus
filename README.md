@@ -28,6 +28,32 @@ direnv allow             # enable directory env variables
 env | grep GITHUB_TOKEN  # verification
 ```
 
+## Renovate (local runner)
+
+This repo includes a Flux-managed Renovate CronJob at `cluster-config/apps/renovate`.
+
+1. Create the namespace and Renovate token secret (PAT with repo access):
+
+    ```sh
+    kubectl apply -f cluster-config/apps/renovate/namespace.yaml
+    kubectl -n renovate create secret generic renovate-secrets \
+      --from-literal=RENOVATE_TOKEN="${GITHUB_TOKEN}"
+    ```
+
+2. Update the repo filter in `cluster-config/apps/renovate/cronjob.yaml`:
+
+    ```yaml
+    - name: RENOVATE_AUTODISCOVER_FILTER
+      value: "your-org/k8s-nvidia-gpus"
+    ```
+
+3. Commit the change and let Flux reconcile, or test locally:
+
+    ```sh
+    kubectl apply -k cluster-config/apps/renovate
+    kubectl -n renovate create job --from=cronjob/renovate renovate-manual
+    ```
+
 ## NVIDIA GPU preparations 
 
 ### VM or Bare-metal RHEL8 settings

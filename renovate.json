@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "dependencyDashboard": true,
+  "dependencyDashboardApproval": true,
+  "dependencyDashboardFooter": "Se kompatible rancher underkomponenter her: https://www.suse.com/suse-rancher/support-matrix/all-supported-versions/",
+  "branchPrefix": "renovate(",
+  "enabledManagers": ["regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^rancher/pom\\.xml$"],
+      "matchStrings": [
+        "\\s*<service.version>(?<currentValue>[^<]+)<\\/service.version>"
+      ],
+      "versioningTemplate": "semver"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["regex"],
+      "matchFiles": ["rancher/pom.xml"],
+      "groupName": "Rancher Upgrade",
+      "commitMessagePrefix": "chore: bump Rancher version"
+    }
+  ]
+}

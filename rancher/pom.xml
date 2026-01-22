@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>dk.ufst.devops.infrastructure</groupId>
+    <artifactId>kairos-bundle-rancher-management</artifactId>
+    <version>0.0.0</version>
+    <relativePath>../</relativePath>
+  </parent>
+
+  <groupId>dk.ufst.devops.infrastructure</groupId>
+  <artifactId>rancher</artifactId>
+  <version>${project.parent.version}</version>
+  <packaging>pom</packaging>
+
+  <properties>
+    <build-config.path>../build-config.yaml</build-config.path>
+    <jkube.createExternalUrls>false</jkube.createExternalUrls>
+    <docker.port>80</docker.port>
+    <docker.targetPort>8080</docker.targetPort>
+    <service.namespace>cattle-system</service.namespace>
+    <!-- renovate: datasource=github-tags depName=rancher/rancher -->
+    <service.version>2.12.2</service.version>
+    <service.checkLabel>release</service.checkLabel>
+    <skipJMeterTests>false</skipJMeterTests>
+  </properties>
+</project>
