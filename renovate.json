@@ -10,8 +10,10 @@
       "customType": "regex",
       "fileMatch": ["^rancher/pom\\.xml$"],
       "matchStrings": [
-        "<!--\\s*renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s*-->\\s*<service\\.version>(?<currentValue>[^<]+)<\\/service\\.version>"
+        "<service\\.version>\\s*(?<currentValue>[^<\\s]+)\\s*<\\/service\\.version>"
       ],
+      "datasourceTemplate": "github-tags",
+      "packageNameTemplate": "rancher/rancher",
       "versioningTemplate": "semver"
     }
   ],
