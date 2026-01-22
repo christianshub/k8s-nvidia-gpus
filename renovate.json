@@ -10,7 +10,7 @@
       "customType": "regex",
       "fileMatch": ["^rancher/pom\\.xml$"],
       "matchStrings": [
-        "\\s*<service.version>(?<currentValue>[^<]+)<\\/service.version>"
+        "<!--\\s*renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s*-->\\s*<service\\.version>(?<currentValue>[^<]+)<\\/service\\.version>"
       ],
       "versioningTemplate": "semver"
     }
