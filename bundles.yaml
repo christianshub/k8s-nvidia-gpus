@@ -1,0 +1,7 @@
+bundles:
+  - name: nginx
+    image: nginx
+    repo: registry-1.docker.io
+    # renovate: datasource=docker depName=nginx registryUrl=https://registry-1.docker.io
+    version: "1.28.0"
+    info_path: /var/lib/rancher/k3s/server/manifests/example/bundle-info.yaml

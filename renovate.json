@@ -3,26 +3,28 @@
   "dependencyDashboard": true,
   "dependencyDashboardApproval": true,
   "dependencyDashboardFooter": "Se kompatible rancher underkomponenter her: https://www.suse.com/suse-rancher/support-matrix/all-supported-versions/",
-  "branchPrefix": "renovate(",
+  "branchPrefix": "renovate/",
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
+  "rebaseWhen": "never",
+  "recreateWhen": "never",
   "enabledManagers": ["regex"],
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["^rancher/pom\\.xml$"],
+      "fileMatch": ["^bundles\\.yaml$"],
       "matchStrings": [
-        "<service\\.version>\\s*(?<currentValue>[^<\\s]+)\\s*<\\/service\\.version>"
+        "#\\s*renovate:\\s*datasource=(?<datasource>[^\\s]+)\\s+depName=(?<depName>[^\\s]+)(?:\\s+registryUrl=(?<registryUrl>[^\\s]+))?\\s*\\n\\s*version:\\s*\"(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\""
       ],
-      "datasourceTemplate": "github-tags",
-      "packageNameTemplate": "rancher/rancher",
       "versioningTemplate": "semver"
     }
   ],
   "packageRules": [
     {
       "matchManagers": ["regex"],
-      "matchFiles": ["rancher/pom.xml"],
-      "groupName": "Rancher Upgrade",
-      "commitMessagePrefix": "chore: bump Rancher version"
+      "matchFileNames": ["bundles.yaml"],
+      "groupName": "Rancher bundle image",
+      "commitMessagePrefix": "chore: bump rancher bundle image"
     }
   ]
 }
